@@ -10,7 +10,18 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Configure environment variables
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Update the new `.env` file with the Firebase values for your project. These
+   variables are injected at build time through `app.config.ts`, so the Expo app
+   (and only the app) can access them via `process.env.EXPO_PUBLIC_*` or
+   `Constants.expoConfig?.extra`.
+
+3. Start the app
 
    ```bash
    npx expo start
