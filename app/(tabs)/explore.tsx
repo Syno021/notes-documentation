@@ -1,112 +1,258 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Link } from 'expo-router';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { sampleNotes } from '@/constants/notes';
 
-export default function TabTwoScreen() {
+const filters = ['All notes', 'Pinned', 'Shared', 'Camera uploads', 'Offline'];
+const notebookStacks = [
+  { id: 'stack-1', title: 'Studio research', count: 18, color: '#F4E8FF' },
+  { id: 'stack-2', title: 'Kitchen journal', count: 11, color: '#E0F2FE' },
+  { id: 'stack-3', title: 'Travel scouts', count: 9, color: '#FEF3C7' },
+];
+
+export default function LibraryScreen() {
   return (
     <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
+      headerBackgroundColor={{ light: '#C7D7FE', dark: '#101828' }}
       headerImage={
         <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
+          size={260}
+          color="#818CF8"
+          name="books.vertical.fill"
           style={styles.headerImage}
         />
       }>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
+        <View>
+          <ThemedText type="title">Library</ThemedText>
+          <ThemedText style={styles.subtitle}>Browse every notebook + photo set</ThemedText>
+        </View>
+        <Pressable style={styles.syncButton} onPress={() => alert('Sync now')}>
+          <ThemedText type="defaultSemiBold" style={styles.syncLabel}>
+            Sync
+          </ThemedText>
+        </Pressable>
       </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}>
+        {filters.map((filter) => (
+          <Pressable
+            key={filter}
+            style={styles.filterChip}
+            onPress={() => alert(`Filter: ${filter}`)}>
+            <ThemedText type="defaultSemiBold">{filter}</ThemedText>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      <View style={styles.statRow}>
+        <ThemedView style={styles.statCard}>
+          <ThemedText type="defaultSemiBold" style={styles.statValue}>
+            38
+          </ThemedText>
+          <ThemedText style={styles.statLabel}>Active notes</ThemedText>
+        </ThemedView>
+        <ThemedView style={styles.statCard}>
+          <ThemedText type="defaultSemiBold" style={styles.statValue}>
+            126
+          </ThemedText>
+          <ThemedText style={styles.statLabel}>Photos this week</ThemedText>
+        </ThemedView>
+        <ThemedView style={styles.statCard}>
+          <ThemedText type="defaultSemiBold" style={styles.statValue}>
+            5
+          </ThemedText>
+          <ThemedText style={styles.statLabel}>Shared spaces</ThemedText>
+        </ThemedView>
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <ThemedText type="subtitle">Notebook stacks</ThemedText>
+        <Pressable onPress={() => alert('Manage stacks')}>
+          <ThemedText type="defaultSemiBold" style={styles.sectionLink}>
+            Manage
+          </ThemedText>
+        </Pressable>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.stackRow}>
+        {notebookStacks.map((stack) => (
+          <Pressable
+            key={stack.id}
+            style={[styles.stackCard, { backgroundColor: stack.color }]}
+            onPress={() => alert(`Open ${stack.title}`)}>
+            <ThemedText type="defaultSemiBold" style={styles.stackTitle}>
+              {stack.title}
             </ThemedText>
-          ),
-        })}
-      </Collapsible>
+            <ThemedText style={styles.stackCount}>{stack.count} notes</ThemedText>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      <View style={styles.sectionHeader}>
+        <ThemedText type="subtitle">All notes</ThemedText>
+        <Pressable onPress={() => alert('Sort options')}>
+          <ThemedText type="defaultSemiBold" style={styles.sectionLink}>
+            Sort
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      <View style={styles.grid}>
+        {sampleNotes.map((note) => (
+          <Link key={note.id} href={`/note/${note.id}`} asChild>
+            <Pressable style={styles.gridCard}>
+              <Image source={{ uri: note.coverImage }} style={styles.gridImage} contentFit="cover" />
+              <View style={styles.gridBody}>
+                <ThemedText type="defaultSemiBold" numberOfLines={1}>
+                  {note.title}
+                </ThemedText>
+                <ThemedText style={styles.gridMeta}>{note.lastEdited}</ThemedText>
+                <View style={styles.gridPhotoRow}>
+                  {note.photos.slice(0, 3).map((photo) => (
+                    <Image key={photo.id} source={{ uri: photo.uri }} style={styles.gridPhotoThumb} />
+                  ))}
+                  {note.photos.length > 3 ? (
+                    <ThemedView style={styles.morePhotosPill}>
+                      <ThemedText type="defaultSemiBold">+{note.photos.length - 3}</ThemedText>
+                    </ThemedView>
+                  ) : null}
+                </View>
+              </View>
+            </Pressable>
+          </Link>
+        ))}
+      </View>
     </ParallaxScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
+    bottom: -40,
+    right: -60,
     position: 'absolute',
   },
   titleContainer: {
     flexDirection: 'row',
-    gap: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 16,
+  },
+  subtitle: {
+    color: '#475467',
+  },
+  syncButton: {
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: '#111827',
+  },
+  syncLabel: {
+    color: '#F8FAFC',
+  },
+  filterRow: {
+    gap: 12,
+    paddingVertical: 16,
+  },
+  filterChip: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#CBD5F5',
+  },
+  statRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 18,
+    backgroundColor: '#0F172A',
+    padding: 16,
+    gap: 4,
+  },
+  statValue: {
+    fontSize: 24,
+    color: '#F8FAFC',
+  },
+  statLabel: {
+    color: '#CBD5F5',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  sectionLink: {
+    color: '#7C3AED',
+  },
+  stackRow: {
+    gap: 12,
+    paddingBottom: 8,
+  },
+  stackCard: {
+    width: 220,
+    borderRadius: 20,
+    padding: 18,
+    gap: 4,
+  },
+  stackTitle: {
+    color: '#0F172A',
+  },
+  stackCount: {
+    color: '#475467',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  gridCard: {
+    width: '47%',
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#111827',
+  },
+  gridImage: {
+    width: '100%',
+    height: 120,
+  },
+  gridBody: {
+    padding: 12,
+    gap: 6,
+  },
+  gridMeta: {
+    color: '#94A3B8',
+  },
+  gridPhotoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  gridPhotoThumb: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+  },
+  morePhotosPill: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#1D4ED8',
   },
 });
+
