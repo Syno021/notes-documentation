@@ -1,40 +1,141 @@
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View, Modal, Dimensions, ActivityIndicator, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useState, useEffect } from 'react';
+import { Audio } from 'expo-av';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { sampleNotes } from '@/constants/notes';
+import { useNote } from '@/hooks/useNote';
+import { base64ToDataUri, formatDuration } from '@/utils/mediaHelpers';
+import { CapturedImage, AudioRecording } from '@/services/database';
 
-const captureTimeline = [
-  { id: 'timeline-1', label: 'Wide reference', time: '10:32 AM', status: 'Tagged' },
-  { id: 'timeline-2', label: 'Detail macro', time: '10:35 AM', status: 'Markup ready' },
-  { id: 'timeline-3', label: 'Color gauge', time: '10:38 AM', status: 'Needs caption' },
-];
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
-  const note = sampleNotes.find((entry) => entry.id === id) ?? sampleNotes[0];
+  const { note, isLoading, error } = useNote(id);
+  
+  const [selectedImage, setSelectedImage] = useState<CapturedImage | null>(null);
+  const [playingAudio, setPlayingAudio] = useState<{ id: number; sound: Audio.Sound } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      // Cleanup audio on unmount
+      if (playingAudio) {
+        playingAudio.sound.unloadAsync();
+      }
+    };
+  }, [playingAudio]);
+
+  const handlePlayAudio = async (audio: AudioRecording) => {
+    try {
+      // Stop currently playing audio if any
+      if (playingAudio) {
+        await playingAudio.sound.stopAsync();
+        await playingAudio.sound.unloadAsync();
+        
+        if (playingAudio.id === audio.id) {
+          setPlayingAudio(null);
+          return;
+        }
+      }
+
+      // Create audio URI from base64
+      const audioUri = base64ToDataUri(audio.audioData, audio.mimeType);
+      
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: true }
+      );
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setPlayingAudio(null);
+          sound.unloadAsync();
+        }
+      });
+
+      setPlayingAudio({ id: audio.id!, sound });
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      Alert.alert('Error', 'Failed to play audio');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <ThemedView style={styles.screen}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#7C3AED" />
+          <ThemedText style={styles.loadingText}>Loading note...</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (error || !note) {
+    return (
+      <ThemedView style={styles.screen}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color="#EF4444" />
+          <ThemedText type="title" style={styles.errorTitle}>
+            Note Not Found
+          </ThemedText>
+          <ThemedText style={styles.errorText}>
+            {error?.message || 'This note could not be loaded'}
+          </ThemedText>
+          <Pressable style={styles.errorButton} onPress={() => router.back()}>
+            <ThemedText type="defaultSemiBold" style={styles.errorButtonLabel}>
+              Go Back
+            </ThemedText>
+          </Pressable>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  const coverImage = note.images.length > 0
+    ? base64ToDataUri(note.images[0].imageData, note.images[0].mimeType)
+    : 'https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=900&auto=format&fit=crop';
+
+  const formattedDate = new Date(note.updatedAt).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 
   return (
     <ThemedView style={styles.screen}>
       <Stack.Screen options={{ title: note.title }} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable style={styles.heroImageShell} onPress={() => alert('Expand gallery')}>
-          <Image source={{ uri: note.coverImage }} style={styles.heroImage} contentFit="cover" />
+        <Pressable 
+          style={styles.heroImageShell} 
+          onPress={() => note.images.length > 0 && setSelectedImage(note.images[0])}
+        >
+          <Image source={{ uri: coverImage }} style={styles.heroImage} contentFit="cover" />
           <View style={styles.heroOverlay}>
             <View style={styles.heroMeta}>
               <View style={styles.heroTag}>
                 <ThemedText type="defaultSemiBold" style={styles.heroTagText}>
-                  {note.tag}
+                  {note.images.length} {note.images.length === 1 ? 'Photo' : 'Photos'}
                 </ThemedText>
               </View>
-              <ThemedText style={styles.heroLocation}>{note.location}</ThemedText>
+              {note.audio.length > 0 && (
+                <View style={[styles.heroTag, { backgroundColor: '#F59E0B' }]}>
+                  <ThemedText type="defaultSemiBold" style={styles.heroTagText}>
+                    {note.audio.length} Audio
+                  </ThemedText>
+                </View>
+              )}
             </View>
             <View style={styles.heroMeta}>
-              <ThemedText style={styles.heroLocation}>{note.lastEdited}</ThemedText>
-              <Pressable style={styles.heroButton} onPress={() => alert('Share note')}>
+              <ThemedText style={styles.heroLocation}>{formattedDate}</ThemedText>
+              <Pressable style={styles.heroButton} onPress={() => Alert.alert('Share', 'Share functionality coming soon')}>
                 <ThemedText type="defaultSemiBold" style={styles.heroButtonLabel}>
                   Share
                 </ThemedText>
@@ -43,94 +144,120 @@ export default function NoteDetailScreen() {
           </View>
         </Pressable>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.photoCarousel}>
-          {note.photos.map((photo) => (
-            <Pressable
-              key={photo.id}
-              style={styles.carouselCard}
-              onPress={() => alert(`Open photo ${photo.caption}`)}>
-              <Image source={{ uri: photo.uri }} style={styles.carouselImage} contentFit="cover" />
-              <ThemedText style={styles.carouselCaption} numberOfLines={1}>
-                {photo.caption}
-              </ThemedText>
-            </Pressable>
-          ))}
-          <Pressable style={styles.addPhotoCard} onPress={() => alert('Add new photo')}>
-            <ThemedText type="defaultSemiBold" style={styles.addPhotoText}>
-              + Capture more
-            </ThemedText>
-          </Pressable>
-        </ScrollView>
-
-        <ThemedView style={styles.detailsCard}>
-          <ThemedText type="defaultSemiBold">Notebooks</ThemedText>
-          <View style={styles.notebookRow}>
-            {note.notebooks.map((book) => (
-              <View key={book} style={styles.notebookPill}>
-                <ThemedText type="defaultSemiBold" style={styles.notebookText}>
-                  {book}
+        {/* Images Carousel */}
+        {note.images.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <ThemedText type="subtitle">Photos ({note.images.length})</ThemedText>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.photoCarousel}>
+              {note.images.map((image) => (
+                <Pressable
+                  key={image.id}
+                  style={styles.carouselCard}
+                  onPress={() => setSelectedImage(image)}>
+                  <Image 
+                    source={{ uri: base64ToDataUri(image.thumbnailData, image.mimeType) }} 
+                    style={styles.carouselImage} 
+                    contentFit="cover" 
+                  />
+                  <ThemedText style={styles.carouselCaption} numberOfLines={1}>
+                    {image.fileName}
+                  </ThemedText>
+                </Pressable>
+              ))}
+              <Pressable style={styles.addPhotoCard} onPress={() => router.push('/(tabs)/capture')}>
+                <ThemedText type="defaultSemiBold" style={styles.addPhotoText}>
+                  + Capture more
                 </ThemedText>
-              </View>
-            ))}
-          </View>
-          <ThemedText style={styles.summary}>{note.summary}</ThemedText>
-        </ThemedView>
-
-        <View style={styles.sectionHeader}>
-          <ThemedText type="subtitle">Checklist</ThemedText>
-          <Pressable onPress={() => alert('Add checklist item')}>
-            <ThemedText type="defaultSemiBold" style={styles.sectionLink}>
-              Add item
-            </ThemedText>
-          </Pressable>
-        </View>
-        <ThemedView style={styles.checklistCard}>
-          {note.checklist.map((item) => (
-            <View key={item.id} style={styles.checklistRow}>
-              <View style={[styles.checkbox, item.done && styles.checkboxDone]} />
-              <View style={styles.checklistTextWrapper}>
-                <ThemedText
-                  style={[styles.checklistText, item.done && styles.checklistTextDone]}>
-                  {item.label}
-                </ThemedText>
-              </View>
-              <Pressable onPress={() => alert(`Toggle ${item.label}`)}>
-                <ThemedText style={styles.checklistToggle}>Toggle</ThemedText>
               </Pressable>
-            </View>
-          ))}
-        </ThemedView>
+            </ScrollView>
+          </>
+        )}
 
+        {/* Audio Recordings */}
+        {note.audio.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <ThemedText type="subtitle">Audio Recordings ({note.audio.length})</ThemedText>
+            </View>
+            <ThemedView style={styles.audioList}>
+              {note.audio.map((audio) => (
+                <Pressable
+                  key={audio.id}
+                  style={[
+                    styles.audioCard,
+                    playingAudio?.id === audio.id && styles.audioCardPlaying
+                  ]}
+                  onPress={() => handlePlayAudio(audio)}>
+                  <Ionicons
+                    name={playingAudio?.id === audio.id ? "pause-circle" : "play-circle"}
+                    size={48}
+                    color="#7C3AED"
+                  />
+                  <View style={styles.audioInfo}>
+                    <ThemedText type="defaultSemiBold" style={styles.audioTitle}>
+                      {audio.fileName}
+                    </ThemedText>
+                    <ThemedText style={styles.audioDuration}>
+                      {formatDuration(audio.duration)}
+                    </ThemedText>
+                  </View>
+                  {playingAudio?.id === audio.id && (
+                    <View style={styles.playingIndicator}>
+                      <ThemedText style={styles.playingText}>Playing...</ThemedText>
+                    </View>
+                  )}
+                </Pressable>
+              ))}
+            </ThemedView>
+          </>
+        )}
+
+        {/* Note Details */}
         <View style={styles.sectionHeader}>
-          <ThemedText type="subtitle">Capture timeline</ThemedText>
-          <Pressable onPress={() => alert('View capture details')}>
-            <ThemedText type="defaultSemiBold" style={styles.sectionLink}>
-              See details
-            </ThemedText>
-          </Pressable>
+          <ThemedText type="subtitle">Note Details</ThemedText>
         </View>
-        <ThemedView style={styles.timelineCard}>
-          {captureTimeline.map((entry, index) => (
-            <View key={entry.id} style={styles.timelineRow}>
-              <View style={styles.timelineIcon} />
-              <View style={styles.timelineContent}>
-                <ThemedText type="defaultSemiBold">{entry.label}</ThemedText>
-                <ThemedText style={styles.timelineMeta}>
-                  {entry.time} · {entry.status}
-                </ThemedText>
-              </View>
-              {index !== captureTimeline.length - 1 && <View style={styles.timelineConnector} />}
-            </View>
-          ))}
+        <ThemedView style={styles.detailsCard}>
+          <ThemedText type="defaultSemiBold" style={styles.detailLabel}>
+            Title
+          </ThemedText>
+          <ThemedText style={styles.detailValue}>{note.title}</ThemedText>
+          
+          {note.description && (
+            <>
+              <ThemedText type="defaultSemiBold" style={[styles.detailLabel, { marginTop: 16 }]}>
+                Description
+              </ThemedText>
+              <ThemedText style={styles.summary}>{note.description}</ThemedText>
+            </>
+          )}
+          
+          <ThemedText type="defaultSemiBold" style={[styles.detailLabel, { marginTop: 16 }]}>
+            Created
+          </ThemedText>
+          <ThemedText style={styles.detailValue}>
+            {new Date(note.createdAt).toLocaleDateString('en-US', {
+              month: 'long',
+              day: 'numeric',
+              year: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            })}
+          </ThemedText>
         </ThemedView>
 
+        {/* Footer Actions */}
         <View style={styles.footerActions}>
-          <Pressable style={styles.primaryAction} onPress={() => alert('Add more photos')}>
+          <Pressable 
+            style={styles.primaryAction} 
+            onPress={() => router.push(`/(tabs)/capture?noteId=${note.id}`)}
+          >
             <ThemedText type="defaultSemiBold" style={styles.primaryActionLabel}>
-              Capture photos
+              Edit / Add Content
             </ThemedText>
           </Pressable>
           <Pressable style={styles.secondaryAction} onPress={() => router.back()}>
@@ -140,6 +267,48 @@ export default function NoteDetailScreen() {
           </Pressable>
         </View>
       </ScrollView>
+
+      {/* Full Image Modal */}
+      <Modal
+        visible={selectedImage !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedImage(null)}>
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={styles.modalBackground}
+            onPress={() => setSelectedImage(null)}
+          />
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText type="defaultSemiBold" style={styles.modalTitle}>
+                {selectedImage?.fileName || 'Image'}
+              </ThemedText>
+              <Pressable onPress={() => setSelectedImage(null)}>
+                <Ionicons name="close" size={28} color="#FFFFFF" />
+              </Pressable>
+            </View>
+            {selectedImage && (
+              <ScrollView 
+                style={styles.modalImageContainer}
+                contentContainerStyle={styles.modalImageContent}
+                maximumZoomScale={3}
+                minimumZoomScale={1}>
+                <Image
+                  source={{ uri: base64ToDataUri(selectedImage.imageData, selectedImage.mimeType) }}
+                  style={styles.fullImage}
+                  contentFit="contain"
+                />
+              </ScrollView>
+            )}
+            <View style={styles.modalFooter}>
+              <ThemedText style={styles.modalInfo}>
+                Pinch to zoom • Tap outside to close
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -152,6 +321,39 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
     paddingHorizontal: 20,
     gap: 24,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    color: '#94A3B8',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    gap: 16,
+  },
+  errorTitle: {
+    color: '#FFFFFF',
+  },
+  errorText: {
+    color: '#94A3B8',
+    textAlign: 'center',
+  },
+  errorButton: {
+    marginTop: 8,
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 999,
+  },
+  errorButtonLabel: {
+    color: '#FFFFFF',
   },
   heroImageShell: {
     borderRadius: 32,
@@ -230,24 +432,62 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
     backgroundColor: '#0B1220',
-    gap: 12,
-  },
-  notebookRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
   },
-  notebookPill: {
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    backgroundColor: '#1D4ED8',
+  detailLabel: {
+    color: '#94A3B8',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
-  notebookText: {
-    color: '#E0E7FF',
+  detailValue: {
+    color: '#FFFFFF',
+    fontSize: 16,
   },
   summary: {
     color: '#CBD5F5',
+    lineHeight: 22,
+  },
+  audioList: {
+    borderRadius: 24,
+    padding: 16,
+    backgroundColor: '#0F172A',
+    gap: 12,
+  },
+  audioCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: '#1E293B',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  audioCardPlaying: {
+    borderColor: '#7C3AED',
+    backgroundColor: '#2D1B69',
+  },
+  audioInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  audioTitle: {
+    color: '#FFFFFF',
+  },
+  audioDuration: {
+    color: '#94A3B8',
+    fontSize: 14,
+  },
+  playingIndicator: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#7C3AED',
+  },
+  playingText: {
+    color: '#FFFFFF',
+    fontSize: 12,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -256,74 +496,6 @@ const styles = StyleSheet.create({
   },
   sectionLink: {
     color: '#7C3AED',
-  },
-  checklistCard: {
-    borderRadius: 24,
-    padding: 16,
-    backgroundColor: '#111827',
-    gap: 12,
-  },
-  checklistRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  checkbox: {
-    height: 22,
-    width: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#475467',
-  },
-  checkboxDone: {
-    backgroundColor: '#22C55E',
-    borderColor: '#22C55E',
-  },
-  checklistTextWrapper: {
-    flex: 1,
-  },
-  checklistText: {
-    color: '#E4E7EC',
-  },
-  checklistTextDone: {
-    textDecorationLine: 'line-through',
-    color: '#94A3B8',
-  },
-  checklistToggle: {
-    color: '#7C3AED',
-  },
-  timelineCard: {
-    borderRadius: 24,
-    padding: 18,
-    backgroundColor: '#0F172A',
-    gap: 16,
-  },
-  timelineRow: {
-    position: 'relative',
-    paddingLeft: 32,
-  },
-  timelineIcon: {
-    position: 'absolute',
-    left: 0,
-    top: 8,
-    height: 12,
-    width: 12,
-    borderRadius: 6,
-    backgroundColor: '#7C3AED',
-  },
-  timelineContent: {
-    gap: 4,
-  },
-  timelineMeta: {
-    color: '#94A3B8',
-  },
-  timelineConnector: {
-    position: 'absolute',
-    left: 5.5,
-    top: 20,
-    bottom: -20,
-    width: 1,
-    backgroundColor: 'rgba(148,163,184,0.5)',
   },
   footerActions: {
     flexDirection: 'row',
@@ -348,6 +520,55 @@ const styles = StyleSheet.create({
   },
   secondaryActionLabel: {
     color: '#E4E7EC',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+  },
+  modalContent: {
+    width: SCREEN_WIDTH,
+    height: '100%',
+    backgroundColor: '#000000',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingTop: 60,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+  },
+  modalTitle: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  modalImageContainer: {
+    flex: 1,
+  },
+  modalImageContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: '100%',
+  },
+  fullImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH * 1.5,
+  },
+  modalFooter: {
+    padding: 20,
+    paddingBottom: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    alignItems: 'center',
+  },
+  modalInfo: {
+    color: '#94A3B8',
+    fontSize: 12,
   },
 });
 

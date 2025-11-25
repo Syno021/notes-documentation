@@ -1,10 +1,12 @@
 import { Image } from 'expo-image';
-import { Link } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Link, useRouter } from 'expo-router';
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { sampleNotes } from '@/constants/notes';
+import { useNotes } from '@/hooks/useNotes';
+import { base64ToDataUri } from '@/utils/mediaHelpers';
 
 const captureQueue = [
   { id: 'capture-1', title: 'Add blueprint close-ups', eta: 'Due in 12 min', color: '#FEC84B' },
@@ -18,13 +20,26 @@ const templates = [
 ];
 
 export default function NotebookHomeScreen() {
-  const pinned = sampleNotes[0];
+  const { notes, isLoading, refresh } = useNotes();
+  const [refreshing, setRefreshing] = useState(false);
+  const router = useRouter();
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  };
+
+  const pinned = notes.length > 0 ? notes[0] : null;
 
   return (
     <ThemedView style={styles.screen}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }>
         <ThemedView style={styles.heroCard}>
           <View style={styles.heroHeaderRow}>
             <View>
@@ -42,14 +57,14 @@ export default function NotebookHomeScreen() {
             doc.
           </ThemedText>
           <View style={styles.heroActions}>
-            <Pressable style={styles.primaryButton} onPress={() => alert('Start note with camera')}>
+            <Pressable style={styles.primaryButton} onPress={() => router.push('/(tabs)/capture')}>
               <ThemedText type="defaultSemiBold" style={styles.primaryButtonLabel}>
                 Capture + note
               </ThemedText>
             </Pressable>
-            <Pressable style={styles.secondaryButton} onPress={() => alert('Open templates')}>
+            <Pressable style={styles.secondaryButton} onPress={() => router.push('/review')}>
               <ThemedText type="defaultSemiBold" style={styles.secondaryButtonLabel}>
-                Choose template
+                Review captures
               </ThemedText>
             </Pressable>
           </View>
@@ -68,142 +83,151 @@ export default function NotebookHomeScreen() {
           ))}
         </ScrollView>
 
-        <View style={styles.sectionHeader}>
-          <View>
-            <ThemedText type="subtitle">Pinned capture</ThemedText>
-            <ThemedText style={styles.sectionHelper}>
-              Continue adding photos or turn it into a shareable doc.
-            </ThemedText>
+        {pinned && (
+          <>
+            <View style={styles.sectionHeader}>
+              <View>
+                <ThemedText type="subtitle">Recent capture</ThemedText>
+                <ThemedText style={styles.sectionHelper}>
+                  Your most recent note with photos and audio.
+                </ThemedText>
+              </View>
+            </View>
+
+            <Link href={`/note/${pinned.id}`} asChild>
+              <Pressable>
+                <ThemedView style={styles.pinnedCard}>
+                  <Image source={{ uri: pinned.coverImage }} style={styles.pinnedImage} contentFit="cover" />
+                  <View style={styles.pinnedContent}>
+                    <ThemedText type="defaultSemiBold" style={styles.pinnedTitle}>
+                      {pinned.title}
+                    </ThemedText>
+                    <ThemedText numberOfLines={2} style={styles.pinnedBody}>
+                      {pinned.description || 'No description'}
+                    </ThemedText>
+                    <View style={styles.pinnedMetaRow}>
+                      {pinned.photoCount > 0 && (
+                        <View style={styles.tagPill}>
+                          <ThemedText type="defaultSemiBold" style={styles.tagPillText}>
+                            {pinned.photoCount} {pinned.photoCount === 1 ? 'photo' : 'photos'}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {pinned.audioCount > 0 && (
+                        <View style={[styles.tagPill, { backgroundColor: '#F59E0B' }]}>
+                          <ThemedText type="defaultSemiBold" style={styles.tagPillText}>
+                            {pinned.audioCount} audio
+                          </ThemedText>
+                        </View>
+                      )}
+                      <ThemedText style={styles.noteTimestamp}>{pinned.lastEdited}</ThemedText>
+                    </View>
+                    {pinned.images.length > 0 && (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <View style={styles.photoStrip}>
+                          {pinned.images.slice(0, 5).map((image) => (
+                            <Image 
+                              key={image.id} 
+                              source={{ uri: base64ToDataUri(image.thumbnailData, image.mimeType) }} 
+                              style={styles.photoStripItem} 
+                            />
+                          ))}
+                        </View>
+                      </ScrollView>
+                    )}
+                  </View>
+                </ThemedView>
+              </Pressable>
+            </Link>
+          </>
+        )}
+
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#7C3AED" />
+            <ThemedText style={styles.loadingText}>Loading your notes...</ThemedText>
           </View>
-          <Pressable onPress={() => alert('Manage pins')}>
-            <ThemedText type="defaultSemiBold" style={styles.tinyLink}>
-              Manage
+        ) : notes.length === 0 ? (
+          <ThemedView style={styles.emptyState}>
+            <ThemedText type="title" style={styles.emptyTitle}>
+              No notes yet
             </ThemedText>
-          </Pressable>
-        </View>
-
-        <Link href={`/note/${pinned.id}`} asChild>
-          <Pressable>
-            <ThemedView style={styles.pinnedCard}>
-              <Image source={{ uri: pinned.coverImage }} style={styles.pinnedImage} contentFit="cover" />
-              <View style={styles.pinnedContent}>
-                <ThemedText type="defaultSemiBold" style={styles.pinnedTitle}>
-                  {pinned.title}
-                </ThemedText>
-                <ThemedText numberOfLines={2} style={styles.pinnedBody}>
-                  {pinned.summary}
-                </ThemedText>
-                <View style={styles.pinnedMetaRow}>
-                  <View style={styles.tagPill}>
-                    <ThemedText type="defaultSemiBold" style={styles.tagPillText}>
-                      {pinned.tag}
-                    </ThemedText>
-                  </View>
-                  <ThemedText style={styles.noteTimestamp}>{pinned.lastEdited}</ThemedText>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.photoStrip}>
-                    {pinned.photos.map((photo) => (
-                      <Image key={photo.id} source={{ uri: photo.uri }} style={styles.photoStripItem} />
-                    ))}
-                  </View>
-                </ScrollView>
-              </View>
-            </ThemedView>
-          </Pressable>
-        </Link>
-
-        <View style={styles.sectionHeader}>
-          <ThemedText type="subtitle">Today&apos;s captures</ThemedText>
-          <Pressable onPress={() => alert('Open calendar')}>
-            <ThemedText type="defaultSemiBold" style={styles.tinyLink}>
-              Calendar
+            <ThemedText style={styles.emptyBody}>
+              Start capturing your ideas with photos and audio. Tap "Capture + note" above to begin.
             </ThemedText>
-          </Pressable>
-        </View>
-
-        {sampleNotes.map((note) => (
-          <Link key={note.id} href={`/note/${note.id}`} asChild>
-            <Pressable style={styles.noteCard}>
-              <Image source={{ uri: note.coverImage }} style={styles.notePhoto} contentFit="cover" />
-              <View style={styles.noteContent}>
-                <View style={styles.noteHeader}>
-                  <ThemedText type="defaultSemiBold" style={styles.noteTitle}>
-                    {note.title}
-                  </ThemedText>
-                  <View style={styles.noteBadge}>
-                    <ThemedText type="defaultSemiBold" style={styles.noteBadgeText}>
-                      {note.photos.length} photos
-                    </ThemedText>
-                  </View>
-                </View>
-                <ThemedText numberOfLines={2} style={styles.noteBody}>
-                  {note.summary}
-                </ThemedText>
-                <View style={styles.noteMetaRow}>
-                  <ThemedText style={styles.noteTimestamp}>{note.lastEdited}</ThemedText>
-                  <ThemedText style={styles.noteTimestamp}>{note.location}</ThemedText>
-                </View>
-                <View style={styles.noteActionRow}>
-                  <Pressable
-                    style={styles.captureButton}
-                    onPress={() => alert(`Add photo to ${note.title}`)}>
-                    <ThemedText type="defaultSemiBold" style={styles.captureButtonLabel}>
-                      Add photo
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={styles.outlineButton}
-                    onPress={() => alert(`Share ${note.title}`)}>
-                    <ThemedText type="defaultSemiBold" style={styles.outlineButtonLabel}>
-                      Share
-                    </ThemedText>
-                  </Pressable>
-                </View>
-              </View>
+            <Pressable style={styles.emptyButton} onPress={() => router.push('/(tabs)/capture')}>
+              <ThemedText type="defaultSemiBold" style={styles.emptyButtonLabel}>
+                Create First Note
+              </ThemedText>
             </Pressable>
-          </Link>
-        ))}
-
-        <View style={styles.sectionHeader}>
-          <ThemedText type="subtitle">Capture queue</ThemedText>
-          <Pressable onPress={() => alert('View all reminders')}>
-            <ThemedText type="defaultSemiBold" style={styles.tinyLink}>
-              See all
-            </ThemedText>
-          </Pressable>
-        </View>
-
-        <View style={styles.queueList}>
-          {captureQueue.map((item) => (
-            <ThemedView key={item.id} style={styles.queueCard}>
-              <View style={[styles.queueDot, { backgroundColor: item.color }]} />
-              <View style={styles.queueContent}>
-                <ThemedText type="defaultSemiBold">{item.title}</ThemedText>
-                <ThemedText style={styles.queueEta}>{item.eta}</ThemedText>
-              </View>
-              <Pressable
-                style={styles.queueButton}
-                onPress={() => alert(`Capture for ${item.title}`)}>
-                <ThemedText type="defaultSemiBold" style={styles.queueButtonLabel}>
-                  Capture now
+          </ThemedView>
+        ) : (
+          <>
+            <View style={styles.sectionHeader}>
+              <ThemedText type="subtitle">All Notes ({notes.length})</ThemedText>
+              <Pressable onPress={refresh}>
+                <ThemedText type="defaultSemiBold" style={styles.tinyLink}>
+                  Refresh
                 </ThemedText>
               </Pressable>
-            </ThemedView>
-          ))}
-        </View>
+            </View>
 
-        <ThemedView style={styles.captureReminder}>
-          <ThemedText type="defaultSemiBold">Hands-free capture</ThemedText>
-          <ThemedText style={styles.reminderBody}>
-            Enable auto-upload to turn every camera snap into a new note instantly.
-          </ThemedText>
-          <Pressable style={styles.autoUploadButton} onPress={() => alert('Enable auto-upload')}>
-            <ThemedText type="defaultSemiBold" style={styles.autoUploadButtonLabel}>
-              Enable auto-upload
-            </ThemedText>
-          </Pressable>
-        </ThemedView>
+            {notes.map((note) => (
+              <Link key={note.id} href={`/note/${note.id}`} asChild>
+                <Pressable style={styles.noteCard}>
+                  <Image source={{ uri: note.coverImage }} style={styles.notePhoto} contentFit="cover" />
+                  <View style={styles.noteContent}>
+                    <View style={styles.noteHeader}>
+                      <ThemedText type="defaultSemiBold" style={styles.noteTitle}>
+                        {note.title}
+                      </ThemedText>
+                      {note.photoCount > 0 && (
+                        <View style={styles.noteBadge}>
+                          <ThemedText type="defaultSemiBold" style={styles.noteBadgeText}>
+                            {note.photoCount} {note.photoCount === 1 ? 'photo' : 'photos'}
+                          </ThemedText>
+                        </View>
+                      )}
+                    </View>
+                    <ThemedText numberOfLines={2} style={styles.noteBody}>
+                      {note.description || 'No description'}
+                    </ThemedText>
+                    <View style={styles.noteMetaRow}>
+                      <ThemedText style={styles.noteTimestamp}>{note.lastEdited}</ThemedText>
+                      {note.audioCount > 0 && (
+                        <ThemedText style={styles.noteTimestamp}>
+                          🎤 {note.audioCount} audio
+                        </ThemedText>
+                      )}
+                    </View>
+                    <View style={styles.noteActionRow}>
+                      <Pressable
+                        style={styles.captureButton}
+                        onPress={(e) => {
+                          e.preventDefault();
+                          router.push('/(tabs)/capture');
+                        }}>
+                        <ThemedText type="defaultSemiBold" style={styles.captureButtonLabel}>
+                          Add photo
+                        </ThemedText>
+                      </Pressable>
+                      <Pressable
+                        style={styles.outlineButton}
+                        onPress={(e) => {
+                          e.preventDefault();
+                          alert(`Share functionality coming soon for: ${note.title}`);
+                        }}>
+                        <ThemedText type="defaultSemiBold" style={styles.outlineButtonLabel}>
+                          Share
+                        </ThemedText>
+                      </Pressable>
+                    </View>
+                  </View>
+                </Pressable>
+              </Link>
+            ))}
+          </>
+        )}
       </ScrollView>
     </ThemedView>
   );
@@ -460,6 +484,43 @@ const styles = StyleSheet.create({
     backgroundColor: '#7C3AED',
   },
   autoUploadButtonLabel: {
+    color: '#FFFFFF',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 16,
+  },
+  loadingText: {
+    color: '#94A3B8',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+    borderRadius: 24,
+    backgroundColor: '#0F172A',
+    gap: 16,
+  },
+  emptyTitle: {
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  emptyBody: {
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  emptyButton: {
+    marginTop: 8,
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 999,
+  },
+  emptyButtonLabel: {
     color: '#FFFFFF',
   },
 });
